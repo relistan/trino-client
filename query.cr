@@ -2,26 +2,18 @@ require "http/client"
 require "uuid"
 require "json"
 
+class PrestoResponse
+  include Enumerable(PrestoResponse)
+
+  def initialize(@response : JSON::Any); end
+
+end
+
 class PrestoClient
   def initialize(@host_port : String, @user : String, @catalog : String, @schema : String); end
 
   def query(query : String, options : Hash(Symbol, String) = {} of Symbol => String)
-    response = HTTP::Client.post(
-      "http://#{@host_port}/v1/statement",
-      HTTP::Headers{
-        "X-Presto-User" => @user,
-        "X-Trino-User" => @user,
-        "X-Presto-Source" => "Crystal client",
-        "X-Trino-Source" => "Crystal client",
-        "X-Presto-Catalog" => @catalog,
-        "X-Trino-Catalog" => @catalog,
-        "X-Presto-Schema" => @schema,
-        "X-Trino-Schema" => @schema,
-        #"X-Presto-Transaction-Id" => UUID.random.to_s
-      },
-      query
-    )
-
+    response = initial_request(query)
     p response.body
 
     resp = JSON.parse(response.body)
@@ -32,18 +24,36 @@ class PrestoClient
     loop do
       puts next_uri
       resp = follow_up(next_uri, state, options)
-
-      begin
-        data << resp["data"]
-      rescue KeyError
-      end
+      accumulate(data, resp) == :end
 
       break if %w{ FINISHED FAILED }.includes?(resp.dig("stats", "state"))
 
       next_uri = resp["nextUri"]
     end
 
-    p data.first
+    p data
+  end
+
+  private def accumulate(acc, resp)
+      acc << resp["data"]
+    rescue KeyError
+  end
+
+  private def initial_request(query)
+    HTTP::Client.post(
+      "http://#{@host_port}/v1/statement",
+      HTTP::Headers{
+        "X-Presto-User" => @user,
+        "X-Trino-User" => @user,
+        "X-Presto-Source" => "Crystal client",
+        "X-Trino-Source" => "Crystal client",
+        "X-Presto-Catalog" => @catalog,
+        "X-Trino-Catalog" => @catalog,
+        "X-Presto-Schema" => @schema,
+        "X-Trino-Schema" => @schema,
+      },
+      query
+    )
   end
 
   private def follow_up(url, state, options)
