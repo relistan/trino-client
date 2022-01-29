@@ -8,6 +8,8 @@ class PrestoClient
   end
 
   def query(query : String, options : Hash(Symbol, String) = {} of Symbol => String)
+    raise ArgumentError.new("Invalid query") if query.size < 7
+
     response = initial_request(query)
     body = JSON.parse(response.body)
 
@@ -79,13 +81,8 @@ class PrestoClient
 end
 
 client = PrestoClient.new("127.0.0.1:8080", "kmatthias")
-resp = client.query(<<-EOF
-  SELECT bv.client_id, bv.tag_key, bv.value
-  FROM cassandra.subscription_data.by_value AS bv
-  WHERE bv.client_id = '71d32975-d8df-4906-a1bf-4fa493528532'
-    AND bv.tag_key = 'club'
-    AND bv.value in ('lions', 'elks')
-EOF
-)
+start_time = Time.local
+resp = client.query(ARGF.gets_to_end)
+STDERR.puts "elapsed: #{Time.local - start_time}"
 
-# p resp
+puts resp.to_pretty_json
