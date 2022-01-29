@@ -38,10 +38,10 @@ class PrestoClient
     HTTP::Client.post(
       "http://#{@host_port}/v1/statement",
       HTTP::Headers{
-        "X-Presto-User"    => @user,
-        "X-Trino-User"     => @user,
-        "X-Presto-Source"  => "Crystal client",
-        "X-Trino-Source"   => "Crystal client"
+        "X-Presto-User"   => @user,
+        "X-Trino-User"    => @user,
+        "X-Presto-Source" => "Crystal client",
+        "X-Trino-Source"  => "Crystal client",
       },
       query
     )
@@ -88,4 +88,4 @@ resp = client.query(<<-EOF
 EOF
 )
 
-#p resp
+# p resp
