@@ -12,39 +12,32 @@ class TrinoClient
   def query(query : String, options : Hash(Symbol, String) = {} of Symbol => String)
     raise TrinoQueryError.new("Invalid query string") if query.size < 7
 
-
-    response = initial_request(query)
-    body = JSON.parse(response.body)
-
-    next_uri = body["nextUri"]
+    body = initial_request(query)
     state = body["stats"].not_nil!["state"]
 
     data = [] of JSON::Any
     columns = [] of String
     loop do
+      next_uri = body["nextUri"]
       body = advance(next_uri, state, options)
       data = accumulate(data, body)
       if complete?(body)
         columns = get_columns(body)
         break
       end
-      next_uri = body["nextUri"]
     end
 
     if errored?(body)
-      {status: "FAILED", error: body["error"]}
+      {status: "FAILED", error: extract_error(body)}
     else
       rows = data.map { |row| columns.zip(row.as_a).to_h }
       {status: "OK", data: rows}
     end
   end
 
-  private def initial_request(query)
-    retries = [60, 70, 80, 90, 100].map(&.milliseconds)
-    response = HTTP::Client::Response.new(400, "No requests were made?")
-
-    while (sleep_time = retries.pop)
-      response = HTTP::Client.post(
+  private def initial_request(query) : JSON::Any
+    response = with_retries do
+      HTTP::Client.post(
         "http://#{@host_port}/v1/statement",
         HTTP::Headers{
           "X-Presto-User"   => @user,
@@ -54,7 +47,16 @@ class TrinoClient
         },
         query
       )
+    end
 
+    JSON.parse(response.body)
+  end
+
+  private def with_retries(&block)
+    retries = [60, 70, 80, 90, 100].map(&.milliseconds)
+
+    while (sleep_time = retries.pop)
+      response = yield
       # Trino docs say anything other than 503 and 200 is a failure
       case response.status_code
       when 503 then sleep(sleep_time); next
@@ -64,9 +66,24 @@ class TrinoClient
       end
     end
 
-    response
+    response.not_nil!
   end
 
+  # Trino returns a pretty huge error structure. This just grabs out the parts
+  # that are useful on the client side and string pools the values so we don't
+  # bloat up memory on repeated failures.
+  private def extract_error(body)
+    err = body["error"]
+    {
+      message:  @pool.get(err["message"].to_s),
+      name:     @pool.get(err["errorName"].to_s),
+      type:     @pool.get(err["errorType"].to_s),
+      location: "line #{err.dig("errorLocation", "lineNumber")}, column #{err.dig("errorLocation", "columnNumber")}",
+    }
+  end
+
+  # Wrap the fetch from the hash and if the key was missing, just return the
+  # value that was passed in as the accumulator.
   private def accumulate(acc, body)
     b = body["data"].as_a
     acc + b
@@ -74,15 +91,19 @@ class TrinoClient
     acc
   end
 
+  # Grab the columns definition from the response, extract the names, and stick
+  # them into an array as Strings.
   private def get_columns(body)
     body["columns"].as_a.map { |c| @pool.get(c["name"].as_s) }
   rescue KeyError
     [] of String
   end
 
-  private def advance(url, state, options)
+  # Make a GET request to the next URI in the chain and parse the response
+  # body.
+  private def advance(url, state, options) : JSON::Any
     if %w{QUEUED RUNNING}.includes?(state)
-      response = HTTP::Client.get(url.to_s)
+      response = with_retries { HTTP::Client.get(url.to_s) }
       JSON.parse(response.body)
     else
       JSON::Any.new(nil)
@@ -98,9 +119,23 @@ class TrinoClient
   end
 end
 
-client = TrinoClient.new("127.0.0.1:8080", "kmatthias")
+require "option_parser"
+
+user = ENV["USER"] || "unknown-user"
+hostname = "localhost"
+port = 8080
+
+OptionParser.parse do |parser|
+  parser.banner = "Usage: query [arguments]"
+  parser.on("-u USERNAME", "--user=USERNAME", "Username to send to Trino ('#{user}')") { |u| user = u }
+  parser.on("-h HOSTNAME", "--host=HOSTNAME", "Hostname/IP to connect to Trino ('#{hostname}')") { |h| hostname = h }
+  parser.on("-p PORT", "--port=PORT", "Port to connect to Trino (#{port})") { |p| post = p }
+  parser.on("--help", "Show this help") { puts parser; exit }
+end
+
+client = TrinoClient.new("#{hostname}:#{port}", user)
 start_time = Time.local
-resp = client.query(ARGF.gets_to_end)
+resp = client.query(STDIN.gets_to_end)
 elapsed = "elapsed: #{Time.local - start_time}"
 
 puts resp.to_pretty_json
