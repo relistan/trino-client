@@ -1,0 +1,13 @@
+name: trino-client
+version: 0.1.0
+
+authors:
+  - Karl Matthias <karl@matthias.org>
+
+targets:
+  trino-client:
+    main: src/trino-client.cr
+
+crystal: 1.2.2
+
+license: MIT
