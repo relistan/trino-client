@@ -5,8 +5,14 @@ require "json"
 class TrinoQueryError < RuntimeError; end
 
 class TrinoClient
-  def initialize(@host_port : String, @user : String, @password : String? = nil)
+  def initialize(@host_port : String, user : String, @use_ssl : Bool)
     @pool = StringPool.new
+    @headers = HTTP::Headers{
+      "X-Presto-User"   => user,
+      "X-Trino-User"    => user,
+      "X-Presto-Source" => "Crystal client",
+      "X-Trino-Source"  => "Crystal client",
+    }
   end
 
   def query(query : String, options : Hash(Symbol, String) = {} of Symbol => String)
@@ -36,20 +42,16 @@ class TrinoClient
   end
 
   private def initial_request(query) : JSON::Any
-    response = with_retries do
-      HTTP::Client.post(
-        "http://#{@host_port}/v1/statement",
-        HTTP::Headers{
-          "X-Presto-User"   => @user,
-          "X-Trino-User"    => @user,
-          "X-Presto-Source" => "Crystal client",
-          "X-Trino-Source"  => "Crystal client",
-        },
-        query
-      )
-    end
-
+    response = with_retries { HTTP::Client.post("#{protocol}://#{@host_port}/v1/statement", @headers, query) }
     JSON.parse(response.body)
+  end
+
+  private def protocol
+    if @use_ssl
+      "https"
+    else
+      "http"
+    end
   end
 
   private def with_retries(&block)
