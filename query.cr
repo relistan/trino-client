@@ -1,5 +1,5 @@
 require "option_parser"
-require "./src/trino-client/trino_client"
+require "./src/trino_client"
 
 user = (ENV["USER"] || "unknown-user")
 hostname = "localhost"
@@ -24,7 +24,7 @@ url_str = if password
             "#{hostname}:#{port}"
           end
 
-client = TrinoClient.new(url_str, user, use_ssl)
+client = TrinoClient::Client.new(url_str, user, use_ssl)
 
 resp = nil
 query = STDIN.gets_to_end

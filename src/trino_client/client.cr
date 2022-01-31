@@ -2,9 +2,9 @@ require "http/client"
 require "uuid"
 require "json"
 
-class TrinoQueryError < RuntimeError; end
+class TrinoClient::TrinoQueryError < RuntimeError; end
 
-class TrinoClient
+class TrinoClient::Client
   def initialize(@host_port : String, user : String, @use_ssl : Bool)
     @pool = StringPool.new
     @headers = HTTP::Headers{
@@ -64,7 +64,7 @@ class TrinoClient
       when 503 then sleep(sleep_time); next
       when 200 then break
       else
-        raise TrinoQueryError.new("Failed " + response.not_nil!.body.inspect)
+        raise TrinoClient::TrinoQueryError.new("Failed " + response.not_nil!.body.inspect)
       end
     end
 
