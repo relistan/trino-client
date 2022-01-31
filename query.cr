@@ -27,6 +27,7 @@ url_str = if password
 client = TrinoClient.new(url_str, user, use_ssl)
 
 resp = nil
-elapsed = Time.measure { resp = client.query(STDIN.gets_to_end) }
+query = STDIN.gets_to_end
+elapsed = Time.measure { resp = client.query(query) }
 puts resp.to_pretty_json
 STDERR.puts "elapsed: #{elapsed}"
