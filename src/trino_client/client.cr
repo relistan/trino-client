@@ -2,10 +2,10 @@ require "http/client"
 require "uuid"
 require "json"
 
-alias AllValues = String | Int64 | Float64
+alias AllValues = String | Int64 | Float64 | Time | UUID
 alias DataValue = Hash(String, AllValues)
 
-class TrinoClient::TrinoQueryError < RuntimeError; end
+class TrinoClient::QueryError < RuntimeError; end
 
 # A Response struct represents the results of a Trino query.
 struct TrinoClient::Response
@@ -31,7 +31,7 @@ class TrinoClient::Client
   end
 
   def query(query : String, options : Hash(Symbol, String) = {} of Symbol => String) : TrinoClient::Response
-    raise TrinoQueryError.new("Invalid query string") if query.size < 7
+    raise QueryError.new("Invalid query string") if query.size < 7
 
     # Strip off any trailing semi-colon so we don't error
     query = query.chomp.rstrip(";")
@@ -65,8 +65,10 @@ class TrinoClient::Client
   end
 
   private def initial_request(query) : JSON::Any
-    response = with_retries { HTTP::Client.post("#{protocol}://#{@host_port}/v1/statement", @headers, query) }
-    JSON.parse(response.body)
+      response = with_retries { HTTP::Client.post("#{protocol}://#{@host_port}/v1/statement", @headers, query) }
+      JSON.parse(response.body)
+    rescue e : JSON::ParseException
+      raise TrinoClient::QueryError.new("Bad query response: #{e.message}")
   end
 
   private def protocol
@@ -87,7 +89,7 @@ class TrinoClient::Client
       when 503 then sleep(sleep_time); next
       when 200 then break
       else
-        raise TrinoClient::TrinoQueryError.new("Failed " + response.not_nil!.body.inspect)
+        raise TrinoClient::QueryError.new("Failed " + response.not_nil!.body.inspect)
       end
     end
 
@@ -112,14 +114,25 @@ class TrinoClient::Client
   private def get_type(key, type)
     case type
     when "integer"  then key.as_i64
+    when "bigint"   then key.as_i64
     when "string"   then key.as_s
     when "text"     then key.as_s
-    when "uuid"     then key.as_s
+    when "uuid"     then UUID.new(key.as_s)
     when "float"    then key.as_f
     when /^varchar/ then key.as_s
+    when /^decimal/ then key.as_s.to_f
+    when /time/     then parse_time(key.as_s)
     else
-      raise TrinoQueryError.new("Unknown type returned: #{type}")
+      raise QueryError.new("Unknown type returned: #{type}")
     end
+  end
+
+  # Attempt to parse out a timestamp that is an ISO8601 UTC timestamp if it
+  # passes the basic regex
+  private def parse_time(time_str : String)
+    Time.parse(time_str, "%F %H:%M:%S.%6N", Time::Location::UTC)
+  rescue Time::Format::Error
+    time_str
   end
 
   # Wrap the fetch from the hash and if the key was missing, just return the

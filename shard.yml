@@ -21,3 +21,7 @@ development_dependencies:
   # and has support for Spectator tests.
   coverage:
     github: relistan/crystal-coverage
+
+  webmock:
+    github: manastech/webmock.cr
+    branch: master
