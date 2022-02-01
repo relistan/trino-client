@@ -1,0 +1,10 @@
+version: 2.0
+shards:
+  coverage:
+    git: https://github.com/relistan/crystal-coverage.git
+    version: 0.1.0+git.commit.d7cf4bade27c8d3ddc165694c045b4c5078d08fc
+
+  spectator:
+    git: https://gitlab.com/arctic-fox/spectator.git
+    version: 0.10.5
+

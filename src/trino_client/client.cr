@@ -2,7 +2,22 @@ require "http/client"
 require "uuid"
 require "json"
 
+alias AllValues = String | Int64 | Float64
+alias DataValue = Hash(String, AllValues)
+
 class TrinoClient::TrinoQueryError < RuntimeError; end
+
+# A Response struct represents the results of a Trino query.
+struct TrinoClient::Response
+  include JSON::Serializable
+  getter :status, :data, :error
+
+  def initialize(@status : String, @data : Array(DataValue), @error : DataValue | Nil = nil); end
+
+  def has_error?
+    !@error.nil?
+  end
+end
 
 class TrinoClient::Client
   def initialize(@host_port : String, user : String, @use_ssl : Bool)
@@ -15,14 +30,17 @@ class TrinoClient::Client
     }
   end
 
-  def query(query : String, options : Hash(Symbol, String) = {} of Symbol => String)
+  def query(query : String, options : Hash(Symbol, String) = {} of Symbol => String) : TrinoClient::Response
     raise TrinoQueryError.new("Invalid query string") if query.size < 7
+
+    # Strip off any trailing semi-colon so we don't error
+    query = query.chomp.rstrip(";")
 
     body = initial_request(query)
     state = body["stats"].not_nil!["state"]
 
     data = [] of JSON::Any
-    columns = [] of String
+    columns = {} of String => String
     loop do
       next_uri = body["nextUri"]
       body = advance(next_uri, state, options)
@@ -34,11 +52,16 @@ class TrinoClient::Client
     end
 
     if errored?(body)
-      {status: "FAILED", error: extract_error(body)}
-    else
-      rows = data.map { |row| columns.zip(row.as_a).to_h }
-      {status: "OK", data: rows}
+      return TrinoClient::Response.new(status: "FAILED", data: [] of DataValue, error: extract_error(body))
     end
+
+    rows = data.map do |row|
+      row = row.as_a
+      values = columns.values.each_with_index.map { |v, i| get_type(row[i], v) }
+      columns.keys.zip(values).to_h
+    end.as(Array(DataValue))
+
+    TrinoClient::Response.new(status: "OK", data: rows)
   end
 
   private def initial_request(query) : JSON::Any
@@ -57,7 +80,7 @@ class TrinoClient::Client
   private def with_retries(&block)
     retries = [60, 70, 80, 90, 100].map(&.milliseconds)
 
-    while (sleep_time = retries.pop)
+    while (sleep_time = retries.shift)
       response = yield
       # Trino docs say anything other than 503 and 200 is a failure
       case response.status_code
@@ -74,14 +97,29 @@ class TrinoClient::Client
   # Trino returns a pretty huge error structure. This just grabs out the parts
   # that are useful on the client side and string pools the values so we don't
   # bloat up memory on repeated failures.
-  private def extract_error(body)
+  private def extract_error(body) : DataValue
     err = body["error"]
     {
-      message:  @pool.get(err["message"].to_s),
-      name:     @pool.get(err["errorName"].to_s),
-      type:     @pool.get(err["errorType"].to_s),
-      location: "line #{err.dig("errorLocation", "lineNumber")}, column #{err.dig("errorLocation", "columnNumber")}",
-    }
+      "message"  => @pool.get(err["message"].to_s).as(AllValues),
+      "name"     => @pool.get(err["errorName"].to_s).as(AllValues),
+      "type"     => @pool.get(err["errorType"].to_s).as(AllValues),
+      "location" => "line #{err.dig("errorLocation", "lineNumber")}, column #{err.dig("errorLocation", "columnNumber")}".as(AllValues),
+    }.as(DataValue)
+  end
+
+  # Do type conversion based on the type names returned from the Trino API
+  # response.
+  private def get_type(key, type)
+    case type
+    when "integer"  then key.as_i64
+    when "string"   then key.as_s
+    when "text"     then key.as_s
+    when "uuid"     then key.as_s
+    when "float"    then key.as_f
+    when /^varchar/ then key.as_s
+    else
+      raise TrinoQueryError.new("Unknown type returned: #{type}")
+    end
   end
 
   # Wrap the fetch from the hash and if the key was missing, just return the
@@ -96,9 +134,11 @@ class TrinoClient::Client
   # Grab the columns definition from the response, extract the names, and stick
   # them into an array as Strings.
   private def get_columns(body)
-    body["columns"].as_a.map { |c| @pool.get(c["name"].as_s) }
+    body["columns"].as_a.map do |c|
+      {@pool.get(c["name"].as_s), @pool.get(c["type"].as_s)}
+    end.to_h
   rescue KeyError
-    [] of String
+    {} of String => String
   end
 
   # Make a GET request to the next URI in the chain and parse the response

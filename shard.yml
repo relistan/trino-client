@@ -11,3 +11,13 @@ targets:
 crystal: 1.2.2
 
 license: MIT
+
+development_dependencies:
+  spectator:
+    gitlab: arctic-fox/spectator
+    version: ~> 0.10.3
+
+  # This is a fork of anykeyh/crystal-coverage that works on Crystal 1.0.0+
+  # and has support for Spectator tests.
+  coverage:
+    github: relistan/crystal-coverage
