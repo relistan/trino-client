@@ -1,5 +1,4 @@
 require "spectator"
-require "../src/uuid"
 require "../src/trino_client"
 
 Spectator.configure do |config|

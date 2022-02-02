@@ -1,5 +1,6 @@
 require "http/client"
 require "uuid"
+require "uuid/json"
 require "json"
 
 alias AllValues = String | Int64 | Float64 | Time | UUID
@@ -93,7 +94,7 @@ class TrinoClient::Client
       when 503 then sleep(sleep_time); next
       when 200 then break
       else
-        raise TrinoClient::QueryError.new("Failed " + response.not_nil!.body.inspect)
+        raise TrinoClient::QueryError.new("Failed. Status #{response.status_code}: " + response.not_nil!.body.inspect)
       end
     end
 
