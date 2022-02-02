@@ -1,9 +1,15 @@
 require "./spec_helper"
 require "webmock"
 
-FIXTURES_PATH = File.expand_path(
-  File.join(File.dirname(__FILE__) , "..", "fixtures")
-)
+FIXTURES_PATH = if __FILE__ == ""
+                  File.expand_path(
+                    File.join(File.dirname(__FILE__), "fixtures")
+                  )
+                else
+                  File.expand_path(
+                    File.join(File.dirname(__FILE__), "..", "fixtures")
+                  )
+                end
 
 Spectator.describe TrinoClient::Client do
   let :client { TrinoClient::Client.new("localhost:8080", "beowulf", use_ssl: false) }
@@ -11,7 +17,6 @@ Spectator.describe TrinoClient::Client do
   after_all do
     WebMock.reset
   end
-
 
   it "instantiates a client" do
     expect(client).not_to be_nil
@@ -62,7 +67,6 @@ Spectator.describe TrinoClient::Client do
     end
   end
 
-
   describe "when failing" do
     after_each do
       WebMock.reset
@@ -112,7 +116,7 @@ def mock_series(base_dir)
   )
 
   files.each_with_index do |fname, i|
-    WebMock.stub(:get, "http://localhost:8080/number_#{i+1}").to_return(
+    WebMock.stub(:get, "http://localhost:8080/number_#{i + 1}").to_return(
       status: 200, body: File.read(fname)
     )
   end
