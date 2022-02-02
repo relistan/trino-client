@@ -1,19 +1,23 @@
 require "./spec_helper"
 require "webmock"
 
+FIXTURES_PATH = File.expand_path(
+  File.join(File.dirname(__FILE__) , "..", "fixtures")
+)
+
 Spectator.describe TrinoClient::Client do
   let :client { TrinoClient::Client.new("localhost:8080", "beowulf", use_ssl: false) }
 
+  it "instantiates a client" do
+    expect(client).not_to be_nil
+  end
+
   describe "when successful" do
-    #before_all do
+    # before_all do
     #  WebMock.stub(:post, "http://localhost:8080/v1/statement").to_return(
     #    status: 200, body: ""
     #  )
-    #end
-
-    it "instantiates a client" do
-      expect(client).not_to be_nil
-    end
+    # end
 
     it "handles a real result set with different data types" do
       result = client.query("
@@ -64,12 +68,30 @@ Spectator.describe TrinoClient::Client do
     end
 
     it "handles a failed query: bad syntax" do
+      returned_json = get_fixture("function_not_found.json")
+      WebMock.stub(:post, "http://localhost:8080/v1/statement")
+        .with(
+          body: "SELECT FOO()",
+          headers: {
+            "X-Presto-User" => "beowulf", "X-Trino-User" => "beowulf",
+            "X-Presto-Source" => "Crystal client",
+            "X-Trino-Source" => "Crystal client"
+          }
+        )
+        .to_return(status: 200, body: returned_json)
+
       result = client.query("SELECT FOO()")
 
       expect(result.status).to eq("FAILED")
       expect(result.data).to be_empty
       expect(result.has_error?).to be_true
-      expect(result.error.not_nil!.keys.sort).to eq(%w{location message name type})
+      expect(result.error).not_to be_nil
+      expect(result.error.not_nil!["message"]).to match(/Function.*not registered/)
     end
   end
 end
+
+def get_fixture(name)
+  File.read(File.join(FIXTURES_PATH, name))
+end
+
