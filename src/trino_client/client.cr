@@ -1,5 +1,6 @@
 require "http/client"
 require "uuid"
+require "uuid/json"
 require "json"
 
 alias AllValues = String | Int64 | Float64 | Time | UUID
@@ -12,7 +13,7 @@ struct TrinoClient::Response
   include JSON::Serializable
   getter :status, :data, :error
 
-  def initialize(@status : String, @data : Array(DataValue), @error : DataValue | Nil = nil); end
+  def initialize(@status : String, @data : Array(DataValue), @error : DataValue? = nil); end
 
   def has_error?
     !@error.nil?
@@ -37,20 +38,24 @@ class TrinoClient::Client
     query = query.chomp.rstrip(";")
 
     body = initial_request(query)
+
     state = body["stats"].not_nil!["state"]
 
     data = [] of JSON::Any
     columns = {} of String => String
-    loop do
-      next_uri = body["nextUri"]
-      body = advance(next_uri, state, options)
-      data = accumulate(data, body)
-      if complete?(body)
-        columns = get_columns(body)
-        break
+    if %w{QUEUED RUNNING}.includes?(state)
+      loop do
+        next_uri = body["nextUri"]
+        body = advance(next_uri, state, options)
+        data = accumulate(data, body)
+        if complete?(body)
+          columns = get_columns(body)
+          break
+        end
       end
     end
 
+    # Check again for the follow up result
     if errored?(body)
       return TrinoClient::Response.new(status: "FAILED", data: [] of DataValue, error: extract_error(body))
     end
@@ -65,10 +70,10 @@ class TrinoClient::Client
   end
 
   private def initial_request(query) : JSON::Any
-      response = with_retries { HTTP::Client.post("#{protocol}://#{@host_port}/v1/statement", @headers, query) }
-      JSON.parse(response.body)
-    rescue e : JSON::ParseException
-      raise TrinoClient::QueryError.new("Bad query response: #{e.message}")
+    response = with_retries { HTTP::Client.post("#{protocol}://#{@host_port}/v1/statement", @headers, query) }
+    JSON.parse(response.body)
+  rescue e : JSON::ParseException
+    raise TrinoClient::QueryError.new("Bad query response: #{e.message}")
   end
 
   private def protocol
@@ -89,7 +94,7 @@ class TrinoClient::Client
       when 503 then sleep(sleep_time); next
       when 200 then break
       else
-        raise TrinoClient::QueryError.new("Failed " + response.not_nil!.body.inspect)
+        raise TrinoClient::QueryError.new("Failed. Status #{response.status_code}: " + response.not_nil!.body.inspect)
       end
     end
 
@@ -157,12 +162,8 @@ class TrinoClient::Client
   # Make a GET request to the next URI in the chain and parse the response
   # body.
   private def advance(url, state, options) : JSON::Any
-    if %w{QUEUED RUNNING}.includes?(state)
-      response = with_retries { HTTP::Client.get(url.to_s) }
-      JSON.parse(response.body)
-    else
-      JSON::Any.new(nil)
-    end
+    response = with_retries { HTTP::Client.get(url.to_s) }
+    JSON.parse(response.body)
   end
 
   private def complete?(body)
