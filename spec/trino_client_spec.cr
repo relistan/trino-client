@@ -1,16 +1,6 @@
 require "./spec_helper"
 require "webmock"
 
-FIXTURES_PATH = if __FILE__ == ""
-                  File.expand_path(
-                    File.join(File.dirname(__FILE__), "fixtures")
-                  )
-                else
-                  File.expand_path(
-                    File.join(File.dirname(__FILE__), "..", "fixtures")
-                  )
-                end
-
 Spectator.describe TrinoClient::Client do
   let :client { TrinoClient::Client.new("localhost:8080", "beowulf", use_ssl: false) }
 
@@ -82,6 +72,16 @@ Spectator.describe TrinoClient::Client do
       }.to raise_error(TrinoClient::QueryError, message: /Bad query response/)
     end
 
+    it "handles an HTTP error response" do
+      WebMock.stub(:post, "http://localhost:8080/v1/statement").to_return(
+        status: 400, body: "400 Bad Request"
+      )
+
+      expect {
+        client.query("SELECT 1 AS heorot")
+      }.to raise_error(TrinoClient::QueryError, message: /Failed. Status 400/)
+    end
+
     it "handles a failed query: too short" do
       expect {
         result = client.query("SEL")
@@ -102,10 +102,6 @@ Spectator.describe TrinoClient::Client do
       expect(result.error.not_nil!["message"]).to match(/Function.*not registered/)
     end
   end
-end
-
-def get_fixture(name)
-  File.read(File.join(FIXTURES_PATH, name))
 end
 
 def mock_series(base_dir)

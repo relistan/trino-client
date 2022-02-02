@@ -2,14 +2,6 @@ require "http/client"
 require "uuid"
 require "json"
 
-struct UUID
-  include JSON::Serializable
-
-  def to_json(json : JSON::Builder)
-    json.scalar(self.to_s)
-  end
-end
-
 alias AllValues = String | Int64 | Float64 | Time | UUID
 alias DataValue = Hash(String, AllValues)
 
