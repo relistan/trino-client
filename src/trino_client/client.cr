@@ -46,23 +46,19 @@ class TrinoClient::Client
 
     body = initial_request(query)
 
-    # Check now, because otherwise there is a race condition. The first
-    # response we get might be the whole failure message.
-    if errored?(body)
-      return TrinoClient::Response.new(status: "FAILED", data: [] of DataValue, error: extract_error(body))
-    end
-
     state = body["stats"].not_nil!["state"]
 
     data = [] of JSON::Any
     columns = {} of String => String
-    loop do
-      next_uri = body["nextUri"]
-      body = advance(next_uri, state, options)
-      data = accumulate(data, body)
-      if complete?(body)
-        columns = get_columns(body)
-        break
+    if %w{QUEUED RUNNING}.includes?(state)
+      loop do
+        next_uri = body["nextUri"]
+        body = advance(next_uri, state, options)
+        data = accumulate(data, body)
+        if complete?(body)
+          columns = get_columns(body)
+          break
+        end
       end
     end
 
@@ -82,7 +78,6 @@ class TrinoClient::Client
 
   private def initial_request(query) : JSON::Any
     response = with_retries { HTTP::Client.post("#{protocol}://#{@host_port}/v1/statement", @headers, query) }
-    p response
     JSON.parse(response.body)
   rescue e : JSON::ParseException
     raise TrinoClient::QueryError.new("Bad query response: #{e.message}")
@@ -174,13 +169,8 @@ class TrinoClient::Client
   # Make a GET request to the next URI in the chain and parse the response
   # body.
   private def advance(url, state, options) : JSON::Any
-    if %w{QUEUED RUNNING}.includes?(state)
-      response = with_retries { HTTP::Client.get(url.to_s) }
-    p response
-      JSON.parse(response.body)
-    else
-      JSON::Any.new(nil)
-    end
+    response = with_retries { HTTP::Client.get(url.to_s) }
+    JSON.parse(response.body)
   end
 
   private def complete?(body)

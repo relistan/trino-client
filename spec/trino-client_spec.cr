@@ -8,33 +8,22 @@ FIXTURES_PATH = File.expand_path(
 Spectator.describe TrinoClient::Client do
   let :client { TrinoClient::Client.new("localhost:8080", "beowulf", use_ssl: false) }
 
+  after_all do
+    WebMock.reset
+  end
+
+
   it "instantiates a client" do
     expect(client).not_to be_nil
   end
 
   describe "when successful" do
-    # before_all do
-    #  WebMock.stub(:post, "http://localhost:8080/v1/statement").to_return(
-    #    status: 200, body: ""
-    #  )
-    # end
+    before_each do
+      mock_series("select_1")
+    end
 
-    it "handles a real result set with different data types" do
-      result = client.query("
-        SELECT 'Some text' AS t, 1.0000005 AS d, count(1) AS count,
-          timestamp '2022-02-01 18:43 UTC' AS time,
-          UUID '12151fd2-7586-11e9-8f9e-2a86e4085a59' AS uuid
-        FROM postgresql.public.subscriptions
-      ")
-
-      expect(result.data.size).to eq(1)
-
-      row = result.data.first
-      expect(row["t"]).to eq("Some text")
-      expect(row["d"]).to eq(1.0000005)
-      expect(row["count"]).to eq(9001)
-      expect(row["time"]).to eq(Time.utc(2022, 2, 1, 18, 43, 0))
-      expect(row["uuid"]).to eq(UUID.new("12151fd2-7586-11e9-8f9e-2a86e4085a59"))
+    after_each do
+      WebMock.reset
     end
 
     it "handles a successful query" do
@@ -46,8 +35,36 @@ Spectator.describe TrinoClient::Client do
     end
   end
 
-  describe "when failing" do
+  describe "supporting various data types" do
     before_each do
+      mock_series("select_data_types")
+    end
+
+    after_each do
+      WebMock.reset
+    end
+
+    it "handles a real result set with different data types" do
+      result = client.query("
+        SELECT 'Some text' AS t, 1.0000005 AS d, count(1) AS count,
+          timestamp '2022-02-01 18:43 UTC' AS time,
+          UUID '12151fd2-7586-11e9-8f9e-2a86e4085a59' AS uuid
+      ")
+
+      expect(result.data.size).to eq(1)
+
+      row = result.data.first
+      expect(row["t"]).to eq("Some text")
+      expect(row["d"]).to eq(1.0000005)
+      expect(row["count"]).to eq(9001)
+      expect(row["time"]).to eq(Time.utc(2022, 2, 1, 18, 43, 0))
+      expect(row["uuid"]).to eq(UUID.new("12151fd2-7586-11e9-8f9e-2a86e4085a59"))
+    end
+  end
+
+
+  describe "when failing" do
+    after_each do
       WebMock.reset
     end
 
@@ -68,17 +85,9 @@ Spectator.describe TrinoClient::Client do
     end
 
     it "handles a failed query: bad syntax" do
-      returned_json = get_fixture("function_not_found.json")
       WebMock.stub(:post, "http://localhost:8080/v1/statement")
-        .with(
-          body: "SELECT FOO()",
-          headers: {
-            "X-Presto-User" => "beowulf", "X-Trino-User" => "beowulf",
-            "X-Presto-Source" => "Crystal client",
-            "X-Trino-Source" => "Crystal client"
-          }
-        )
-        .to_return(status: 200, body: returned_json)
+        .with(body: "SELECT FOO()")
+        .to_return(status: 200, body: get_fixture("function_not_found.json"))
 
       result = client.query("SELECT FOO()")
 
@@ -95,3 +104,16 @@ def get_fixture(name)
   File.read(File.join(FIXTURES_PATH, name))
 end
 
+def mock_series(base_dir)
+  files = Dir[File.join([FIXTURES_PATH, base_dir, "*.json"])].sort
+
+  WebMock.stub(:post, "http://localhost:8080/v1/statement").to_return(
+    status: 200, body: File.read(files.shift)
+  )
+
+  files.each_with_index do |fname, i|
+    WebMock.stub(:get, "http://localhost:8080/number_#{i+1}").to_return(
+      status: 200, body: File.read(fname)
+    )
+  end
+end
