@@ -1,0 +1,25 @@
+{
+   "id" : "20220130_112710_00157_3hwia",
+   "infoUri" : "http://localhost:8080/ui/query.html?20220130_112710_00157_3hwia",
+   "nextUri" : "http://localhost:8080/number_2",
+   "stats" : {
+      "completedSplits" : 0,
+      "cpuTimeMillis" : 0,
+      "elapsedTimeMillis" : 9,
+      "nodes" : 0,
+      "peakMemoryBytes" : 0,
+      "physicalInputBytes" : 0,
+      "processedBytes" : 0,
+      "processedRows" : 0,
+      "queued" : true,
+      "queuedSplits" : 0,
+      "queuedTimeMillis" : 0,
+      "runningSplits" : 0,
+      "scheduled" : false,
+      "spilledBytes" : 0,
+      "state" : "QUEUED",
+      "totalSplits" : 0,
+      "wallTimeMillis" : 0
+   },
+   "warnings" : []
+}

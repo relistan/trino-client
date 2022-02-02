@@ -1,0 +1,135 @@
+{
+  "id": "20220130_133035_00162_3hwia",
+  "infoUri": "http://localhost:8080/ui/query.html?20220130_133035_00162_3hwia",
+  "partialCancelUri": "http://localhost:8080/v1/statement/executing/partialCancel/20220130_133035_00162_3hwia/0/y62bb012ece03f2c493de8e2b9d78d62df2f6d786/1",
+  "nextUri": "http://localhost:8080/number_4",
+  "columns": [
+    {
+      "name": "t",
+      "type": "varchar(9)",
+      "typeSignature": {
+        "rawType": "varchar",
+        "arguments": [
+          {
+            "kind": "LONG",
+            "value": 9
+          }
+        ]
+      }
+    },
+    {
+      "name": "d",
+      "type": "decimal(8, 7)",
+      "typeSignature": {
+        "rawType": "decimal",
+        "arguments": [
+          {
+            "kind": "LONG",
+            "value": 8
+          },
+          {
+            "kind": "LONG",
+            "value": 7
+          }
+        ]
+      }
+    },
+    {
+      "name": "count",
+      "type": "bigint",
+      "typeSignature": {
+        "rawType": "bigint",
+        "arguments": [
+
+        ]
+      }
+    },
+    {
+      "name": "time",
+      "type": "timestamp with time zone",
+      "typeSignature": {
+        "rawType": "timestamp with time zone",
+        "arguments": [
+
+        ]
+      }
+    },
+    {
+      "name": "uuid",
+      "type": "uuid",
+      "typeSignature": {
+        "rawType": "uuid",
+        "arguments": [
+
+        ]
+      }
+    }
+  ],
+  "data": [
+    [
+      "Some text",
+      "1.0000005",
+      9001,
+      "2022-02-01 18:43:00.000 UTC",
+      "12151fd2-7586-11e9-8f9e-2a86e4085a59"
+    ]
+  ],
+  "stats": {
+    "state": "RUNNING",
+    "queued": false,
+    "scheduled": true,
+    "nodes": 1,
+    "totalSplits": 17,
+    "queuedSplits": 0,
+    "runningSplits": 17,
+    "completedSplits": 0,
+    "cpuTimeMillis": 0,
+    "wallTimeMillis": 1,
+    "queuedTimeMillis": 0,
+    "elapsedTimeMillis": 160,
+    "processedRows": 0,
+    "processedBytes": 0,
+    "physicalInputBytes": 0,
+    "peakMemoryBytes": 0,
+    "spilledBytes": 0,
+    "rootStage": {
+      "stageId": "0",
+      "state": "RUNNING",
+      "done": false,
+      "nodes": 1,
+      "totalSplits": 16,
+      "queuedSplits": 0,
+      "runningSplits": 16,
+      "completedSplits": 0,
+      "cpuTimeMillis": 0,
+      "wallTimeMillis": 1,
+      "processedRows": 0,
+      "processedBytes": 0,
+      "physicalInputBytes": 0,
+      "subStages": [
+        {
+          "stageId": "1",
+          "state": "FINISHED",
+          "done": true,
+          "nodes": 1,
+          "totalSplits": 1,
+          "queuedSplits": 0,
+          "runningSplits": 1,
+          "completedSplits": 0,
+          "cpuTimeMillis": 0,
+          "wallTimeMillis": 0,
+          "processedRows": 0,
+          "processedBytes": 0,
+          "physicalInputBytes": 0,
+          "subStages": [
+
+          ]
+        }
+      ]
+    },
+    "progressPercentage": 0.0
+  },
+  "warnings": [
+
+  ]
+}
